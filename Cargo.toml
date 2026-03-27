@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Shared Peach Note vault format, manifest, and encryption primitives"
 license = "MIT"
-repository = "https://github.com/Touutae-labs/peachnote-vault-core"
+repository = "https://github.com/Quickpeach/peachnote-vault-core"
 
 [dependencies]
 base64 = "0.22"
