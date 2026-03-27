@@ -1,0 +1,4 @@
+Hello, this is a plain text note.
+It has multiple lines.
+Special chars: é, ñ, 日本語
+End of file.
