@@ -1,0 +1,18 @@
+[package]
+name = "peachnote-vault-core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared Peach Note vault format, manifest, and encryption primitives"
+license = "MIT"
+repository = "https://github.com/Touutae-labs/peachnote-vault-core"
+
+[dependencies]
+base64 = "0.22"
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2.0"
+
