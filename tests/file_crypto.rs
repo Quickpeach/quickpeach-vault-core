@@ -33,8 +33,8 @@ fn assert_file_round_trips(filename: &str, scope: &str, root_key: &[u8; 32]) {
     let decoded = decode_envelope(&encode_envelope(&env)).expect("envelope codec failed");
     assert_eq!(decoded, env);
 
-    let plaintext = open_namespaced(root_key, "vault.notes", scope, &decoded, Some(&aad))
-        .expect("open failed");
+    let plaintext =
+        open_namespaced(root_key, "vault.notes", scope, &decoded, Some(&aad)).expect("open failed");
     assert_eq!(plaintext, original, "{filename}: decrypted content differs");
 }
 
