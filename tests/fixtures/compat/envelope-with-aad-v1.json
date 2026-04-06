@@ -1,0 +1,9 @@
+{
+  "root_key_hex": "4343434343434343434343434343434343434343434343434343434343434343",
+  "namespace": "quickpeach.attachments",
+  "scope": "attachment/photo.png",
+  "key_version": 1,
+  "extra_aad_hex": "696d6167652f706e67",
+  "plaintext_utf8": "fake-png-bytes-for-testing",
+  "envelope_json": "{\n  \"algorithm\": \"xchacha20poly1305\",\n  \"keyVersion\": 1,\n  \"nonceBase64\": \"fJUnyQSqtg89apqu5cCoGnMiWD9QVdyE\",\n  \"ciphertextBase64\": \"tN2ujVBuPT6sFfOtIRt01INeo8NEvi2pA/T9Op++XuC82roUagmHHdoU\"\n}"
+}

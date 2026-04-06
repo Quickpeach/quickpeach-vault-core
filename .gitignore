@@ -1,2 +1,6 @@
 /target
-
+.DS_Store
+.claude/
+/fuzz/target
+/fuzz/artifacts
+/fuzz/corpus

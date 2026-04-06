@@ -1,0 +1,32 @@
+[package]
+name = "peachnote-vault-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+peachnote-vault-core = { path = ".." }
+serde_json = "1"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_decode_envelope"
+path = "fuzz_targets/fuzz_decode_envelope.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_recovery_parse"
+path = "fuzz_targets/fuzz_recovery_parse.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_seal_open_round_trip"
+path = "fuzz_targets/fuzz_seal_open_round_trip.rs"
+doc = false

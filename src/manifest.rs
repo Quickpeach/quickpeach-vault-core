@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,22 +40,38 @@ pub struct VaultManifest {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum VaultManifestError {
     #[error("manifest serialization failed: {0}")]
     Serialize(#[from] serde_json::Error),
 }
 
+/// Compute a SHA-256 hash of the manifest's canonical JSON representation.
+///
+/// The `manifest_hash` field should be `None` when computing the hash to
+/// avoid self-referential hashing. The result is lowercase hex, 64 characters.
 pub fn manifest_hash_hex(manifest: &VaultManifest) -> Result<String, VaultManifestError> {
     let json = serde_json::to_vec(manifest)?;
     let digest = Sha256::digest(json);
     Ok(hex_string(&digest))
 }
 
+/// Compare two manifest hashes in constant time.
+///
+/// Use this instead of `==` to avoid timing side-channels when verifying
+/// manifest integrity. Both inputs should be 64-character lowercase hex strings
+/// from [`manifest_hash_hex`].
+pub fn manifest_hash_eq(a: &str, b: &str) -> bool {
+    a.as_bytes().ct_eq(b.as_bytes()).into()
+}
+
 fn hex_string(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
+    use std::fmt::Write;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
 }
 
 #[cfg(test)]

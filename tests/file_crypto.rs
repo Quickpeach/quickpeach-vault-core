@@ -1,3 +1,9 @@
+//! Round-trip tests against real files on disk.
+//!
+//! These use the fixture files in tests/fixtures/ to make sure we handle
+//! actual file contents (not just synthetic byte slices) through the full
+//! seal → encode → decode → open pipeline.
+
 use peachnote_vault_core::crypto::{
     decode_envelope, encode_envelope, open_namespaced, seal_namespaced,
 };
@@ -8,131 +14,31 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-#[test]
-fn encrypt_decrypt_real_txt_file() {
-    let path = fixtures_dir().join("sample.txt");
-    let original = fs::read(&path).expect("failed to read sample.txt");
-    let original_str = String::from_utf8_lossy(&original);
+/// Seal a real file, put it through the base64 transport form, and verify
+/// the decrypted output is byte-identical to the original.
+fn assert_file_round_trips(filename: &str, scope: &str, root_key: &[u8; 32]) {
+    let path = fixtures_dir().join(filename);
+    let original = fs::read(&path).unwrap_or_else(|e| panic!("{filename}: {e}"));
+    let aad = path.file_name().unwrap().as_encoded_bytes();
 
-    println!("=== Original TXT ({} bytes) ===", original.len());
-    println!("{original_str}");
+    let env = seal_namespaced(root_key, "vault.notes", scope, &original, Some(aad), 1)
+        .expect("seal failed");
 
-    let root_key = [0xABu8; 32];
-    let filename_aad = path.file_name().unwrap().as_encoded_bytes();
+    // base64 transport round-trip
+    let decoded = decode_envelope(&encode_envelope(&env)).expect("envelope codec failed");
+    assert_eq!(decoded, env);
 
-    let envelope = seal_namespaced(
-        &root_key,
-        "vault.notes",
-        "files/txt",
-        &original,
-        Some(filename_aad),
-        1,
-    )
-    .expect("seal txt file");
-
-    println!("=== Envelope ===");
-    println!("algorithm : {}", envelope.algorithm);
-    println!("key_version: {}", envelope.key_version);
-    println!("nonce (hex): {}", hex(&envelope.nonce));
-    println!(
-        "ciphertext : {} bytes (first 32 hex: {})",
-        envelope.ciphertext.len(),
-        hex(&envelope.ciphertext[..envelope.ciphertext.len().min(32)])
-    );
-
-    // encode -> base64 transport form
-    let encoded = encode_envelope(&envelope);
-    println!("\n=== Encoded (base64 transport) ===");
-    println!("nonce_base64     : {}", encoded.nonce_base64);
-    println!(
-        "ciphertext_base64: {}...",
-        &encoded.ciphertext_base64[..encoded.ciphertext_base64.len().min(60)]
-    );
-
-    // decode back
-    let decoded = decode_envelope(&encoded).expect("decode envelope");
-    assert_eq!(decoded, envelope);
-    println!("\n=== Decode check: OK (envelope matches) ===");
-
-    // decrypt
-    let decrypted = open_namespaced(
-        &root_key,
-        "vault.notes",
-        "files/txt",
-        &decoded,
-        Some(filename_aad),
-    )
-    .expect("open txt file");
-
-    let decrypted_str = String::from_utf8_lossy(&decrypted);
-    println!("\n=== Decrypted TXT ({} bytes) ===", decrypted.len());
-    println!("{decrypted_str}");
-
-    assert_eq!(decrypted, original, "decrypted content must match original");
-    println!("\n=== PASS: txt round-trip identical ===");
+    let plaintext =
+        open_namespaced(root_key, "vault.notes", scope, &decoded, Some(aad)).expect("open failed");
+    assert_eq!(plaintext, original, "{filename}: decrypted content differs");
 }
 
 #[test]
-fn encrypt_decrypt_real_md_file() {
-    let path = fixtures_dir().join("sample.md");
-    let original = fs::read(&path).expect("failed to read sample.md");
-    let original_str = String::from_utf8_lossy(&original);
-
-    println!("=== Original MD ({} bytes) ===", original.len());
-    println!("{original_str}");
-
-    let root_key = [0xCDu8; 32];
-    let filename_aad = path.file_name().unwrap().as_encoded_bytes();
-
-    let envelope = seal_namespaced(
-        &root_key,
-        "vault.notes",
-        "files/md",
-        &original,
-        Some(filename_aad),
-        1,
-    )
-    .expect("seal md file");
-
-    println!("=== Envelope ===");
-    println!("algorithm : {}", envelope.algorithm);
-    println!("key_version: {}", envelope.key_version);
-    println!("nonce (hex): {}", hex(&envelope.nonce));
-    println!(
-        "ciphertext : {} bytes (first 32 hex: {})",
-        envelope.ciphertext.len(),
-        hex(&envelope.ciphertext[..envelope.ciphertext.len().min(32)])
-    );
-
-    let encoded = encode_envelope(&envelope);
-    println!("\n=== Encoded (base64 transport) ===");
-    println!("nonce_base64     : {}", encoded.nonce_base64);
-    println!(
-        "ciphertext_base64: {}...",
-        &encoded.ciphertext_base64[..encoded.ciphertext_base64.len().min(60)]
-    );
-
-    let decoded = decode_envelope(&encoded).expect("decode envelope");
-    assert_eq!(decoded, envelope);
-    println!("\n=== Decode check: OK (envelope matches) ===");
-
-    let decrypted = open_namespaced(
-        &root_key,
-        "vault.notes",
-        "files/md",
-        &decoded,
-        Some(filename_aad),
-    )
-    .expect("open md file");
-
-    let decrypted_str = String::from_utf8_lossy(&decrypted);
-    println!("\n=== Decrypted MD ({} bytes) ===", decrypted.len());
-    println!("{decrypted_str}");
-
-    assert_eq!(decrypted, original, "decrypted content must match original");
-    println!("\n=== PASS: md round-trip identical ===");
+fn txt_file_round_trip() {
+    assert_file_round_trips("sample.txt", "files/txt", &[0xABu8; 32]);
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+#[test]
+fn md_file_round_trip() {
+    assert_file_round_trips("sample.md", "files/md", &[0xCDu8; 32]);
 }

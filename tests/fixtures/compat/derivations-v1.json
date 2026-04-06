@@ -1,0 +1,42 @@
+[
+  {
+    "root_key_hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "namespace": "test-ns",
+    "scope": "test-scope",
+    "key_version": 1,
+    "derived_key_hex": "a2b3d713176bada018eead333a144c586f69bc493fa7d496bef4738814100f67",
+    "aad_hex": "70656163686e6f74652d7661756c742f763100746573742d6e7300746573742d73636f706500"
+  },
+  {
+    "root_key_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+    "namespace": "quickpeach.notes",
+    "scope": "note/fixture-001",
+    "key_version": 1,
+    "derived_key_hex": "0fc7a71dcefef015a6c74ca268b92412239b9926e77a443786ce4d29d22f2f7e",
+    "aad_hex": "70656163686e6f74652d7661756c742f763100717569636b70656163682e6e6f746573006e6f74652f666978747572652d30303100"
+  },
+  {
+    "root_key_hex": "4343434343434343434343434343434343434343434343434343434343434343",
+    "namespace": "quickpeach.attachments",
+    "scope": "attachment/photo.png",
+    "key_version": 1,
+    "derived_key_hex": "510d7da7fde8f2353e597bc090e9503b7dfce25ff938e37ce72d1fa5b4c5d958",
+    "aad_hex": "70656163686e6f74652d7661756c742f763100717569636b70656163682e6174746163686d656e7473006174746163686d656e742f70686f746f2e706e6700"
+  },
+  {
+    "root_key_hex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "namespace": "quickpeach.extensions",
+    "scope": "ext/demo-plugin",
+    "key_version": 1,
+    "derived_key_hex": "235a9ad1b28b3d9515d989aa6c722a7433ac9d835f858da3b1b43c6e210a653a",
+    "aad_hex": "70656163686e6f74652d7661756c742f763100717569636b70656163682e657874656e73696f6e73006578742f64656d6f2d706c7567696e00"
+  },
+  {
+    "root_key_hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "namespace": "test-ns",
+    "scope": "test-scope",
+    "key_version": 2,
+    "derived_key_hex": "bbf3bfd75159b699372434ef95f6d175cd0abdfa51bee3ab7d31ae9ac96139d1",
+    "aad_hex": "70656163686e6f74652d7661756c742f763200746573742d6e7300746573742d73636f706500"
+  }
+]

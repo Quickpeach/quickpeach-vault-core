@@ -1,0 +1,4 @@
+{
+  "manifest_json": "{\n  \"objectKind\": \"note\",\n  \"objectId\": \"note-fixture-001\",\n  \"objectVersion\": 1,\n  \"manifestHash\": null,\n  \"previousManifestHash\": null,\n  \"contentHash\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n  \"keyVersion\": 1,\n  \"updatedAt\": \"2026-03-31T00:00:00Z\",\n  \"chunks\": [\n    {\n      \"chunkId\": \"chunk-a\",\n      \"plaintextByteSize\": 94,\n      \"ciphertextByteSize\": 110,\n      \"contentHash\": \"abcdef1234567890\"\n    }\n  ]\n}",
+  "expected_hash": "76adfcc7ade0cd3bb14781a7080a0aabb92c0e9deb34e5f64f304dcee38c7d97"
+}

@@ -1,0 +1,9 @@
+{
+  "root_key_hex": "4242424242424242424242424242424242424242424242424242424242424242",
+  "namespace": "quickpeach.notes",
+  "scope": "note/fixture-001",
+  "key_version": 1,
+  "extra_aad_hex": null,
+  "plaintext_utf8": "This is a compatibility test note. If you can read this after decryption, v1 format is intact.",
+  "envelope_json": "{\n  \"algorithm\": \"xchacha20poly1305\",\n  \"keyVersion\": 1,\n  \"nonceBase64\": \"7L41NpoEA8eKQoXMCsIrswQJJbSyC6Zj\",\n  \"ciphertextBase64\": \"UMaxpxEJi6P3KLm85p0QIv1la6zuLQeoQwwk1JpCPs0X7W3QtZcs3IarsM9zXiDXA8Ax9GT4YS6pRByWwWe2p0/ewMTcUaZkH5VaIevx1NmSZoc2Ym19K3Aoy3qy/SPObDJz47/wsr5FVPHUKqM=\"\n}"
+}
