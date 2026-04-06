@@ -95,7 +95,7 @@ pub fn parse_recovery_bundle_document(
         let inner = inner.trim();
 
         // try binary PEM first (base64 → bytes → decode binary)
-        if let Ok(bytes) = BASE64_STANDARD.decode(inner.replace('\n', "").replace('\r', "")) {
+        if let Ok(bytes) = BASE64_STANDARD.decode(inner.replace(['\n', '\r'], "")) {
             if bytes.starts_with(b"QPRB") {
                 let (doc, _) = decode_recovery_bundle_binary(&bytes)?;
                 return Ok(doc);

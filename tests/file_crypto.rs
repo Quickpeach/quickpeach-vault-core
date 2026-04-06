@@ -19,17 +19,22 @@ fn fixtures_dir() -> PathBuf {
 fn assert_file_round_trips(filename: &str, scope: &str, root_key: &[u8; 32]) {
     let path = fixtures_dir().join(filename);
     let original = fs::read(&path).unwrap_or_else(|e| panic!("{filename}: {e}"));
-    let aad = path.file_name().unwrap().as_encoded_bytes();
+    let aad = path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned()
+        .into_bytes();
 
-    let env = seal_namespaced(root_key, "vault.notes", scope, &original, Some(aad), 1)
+    let env = seal_namespaced(root_key, "vault.notes", scope, &original, Some(&aad), 1)
         .expect("seal failed");
 
     // base64 transport round-trip
     let decoded = decode_envelope(&encode_envelope(&env)).expect("envelope codec failed");
     assert_eq!(decoded, env);
 
-    let plaintext =
-        open_namespaced(root_key, "vault.notes", scope, &decoded, Some(aad)).expect("open failed");
+    let plaintext = open_namespaced(root_key, "vault.notes", scope, &decoded, Some(&aad))
+        .expect("open failed");
     assert_eq!(plaintext, original, "{filename}: decrypted content differs");
 }
 
