@@ -41,7 +41,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          CRATE_NAME="peachnote-vault-core"
+          export CRATE_NAME="peachnote-vault-core"
           LAST_TAG="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
           LATEST_PUBLISHED="$(python - <<'PY'
           import json
@@ -99,7 +99,7 @@ jobs:
       - name: Update crate version in Cargo.toml
         shell: bash
         run: |
-          RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
+          export RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
           python - <<'PY'
           import os
           import pathlib
