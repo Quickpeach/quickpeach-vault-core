@@ -22,6 +22,7 @@ jobs:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     permissions:
       contents: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -125,11 +126,14 @@ jobs:
         run: |
           echo "Dry run — peachnote-vault-core ${{ steps.version.outputs.release_version }} packaged OK. Nothing published." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Authenticate with crates.io
+        if: github.event_name == 'push' || inputs.dry_run != true
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
       - name: Publish to crates.io
         if: github.event_name == 'push' || inputs.dry_run != true
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --allow-dirty
+        run: cargo publish --allow-dirty --token "${{ steps.auth.outputs.token }}"
 
       - name: Commit version bump and push tag
         if: github.event_name == 'push' || inputs.dry_run != true
