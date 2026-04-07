@@ -51,8 +51,9 @@ jobs:
           import json, os, urllib.error, urllib.request
           crate = os.environ["CRATE_NAME"]
           url = f"https://crates.io/api/v1/crates/{crate}"
+          req = urllib.request.Request(url, headers={"User-Agent": "github-actions/quickpeach-vault-core"})
           try:
-              with urllib.request.urlopen(url, timeout=30) as r:
+              with urllib.request.urlopen(req, timeout=30) as r:
                   data = json.load(r)
               print(data.get("crate", {}).get("max_stable_version") or data.get("crate", {}).get("newest_version") or "")
           except urllib.error.HTTPError as e:

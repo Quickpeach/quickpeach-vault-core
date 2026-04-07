@@ -39,7 +39,7 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Lint
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
   test-matrix:
     name: Test (${{ matrix.os }})
@@ -64,7 +64,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --locked
+        run: cargo test
 
   msrv:
     name: MSRV (1.72.0)
@@ -84,7 +84,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Verify tests on MSRV
-        run: cargo test --locked
+        run: cargo test
 
   package-preview:
     name: Package Preview
@@ -102,7 +102,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check fuzz targets compile
-        run: cargo check --locked --manifest-path fuzz/Cargo.toml
+        run: cargo check --manifest-path fuzz/Cargo.toml
 
       - name: Verify crates.io package
-        run: cargo publish --dry-run --locked
+        run: cargo publish --dry-run
