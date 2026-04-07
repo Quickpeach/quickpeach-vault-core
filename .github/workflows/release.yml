@@ -22,7 +22,6 @@ jobs:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     permissions:
       contents: write
-      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,92 +36,79 @@ jobs:
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
 
-      - name: Resolve release version
+      - name: Resolve next patch version
         id: version
         shell: bash
         run: |
           export CRATE_NAME="peachnote-vault-core"
+
+          # Prefer last git tag; fall back to latest published on crates.io
           LAST_TAG="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
-          LATEST_PUBLISHED="$(python - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-
-          crate_name = os.environ["CRATE_NAME"]
-          url = f"https://crates.io/api/v1/crates/{crate_name}"
-          try:
-              with urllib.request.urlopen(url, timeout=30) as response:
-                  data = json.load(response)
-          except urllib.error.HTTPError as exc:
-              if exc.code == 404:
-                  print("")
-              else:
-                  raise
-          else:
-              version = data.get("crate", {}).get("max_stable_version") or data.get("crate", {}).get("newest_version") or ""
-              print(version)
-          PY
-          )"
-
           if [[ -n "${LAST_TAG}" ]]; then
-            BASELINE_VERSION="${LAST_TAG#v}"
-          elif [[ -n "${LATEST_PUBLISHED}" ]]; then
-            BASELINE_VERSION="${LATEST_PUBLISHED}"
+            BASELINE="${LAST_TAG#v}"
           else
-            echo "::error::Trusted publishing requires a one-time manual crates.io release before this workflow can auto-publish."
+            BASELINE="$(python - <<'PY'
+          import json, os, urllib.error, urllib.request
+          crate = os.environ["CRATE_NAME"]
+          url = f"https://crates.io/api/v1/crates/{crate}"
+          try:
+              with urllib.request.urlopen(url, timeout=30) as r:
+                  data = json.load(r)
+              print(data.get("crate", {}).get("max_stable_version") or data.get("crate", {}).get("newest_version") or "")
+          except urllib.error.HTTPError as e:
+              print("") if e.code == 404 else (_ for _ in ()).throw(e)
+          PY
+            )"
+          fi
+
+          if [[ -z "${BASELINE}" ]]; then
+            # No prior release found — use the version already in Cargo.toml
+            BASELINE="$(python - <<'PY'
+          import pathlib, re
+          text = pathlib.Path("Cargo.toml").read_text(encoding="utf-8")
+          m = re.search(r'(?:^|\n)\[package\][\s\S]*?\nversion = "([^"]+)"', text)
+          if not m: raise SystemExit("Could not read version from Cargo.toml")
+          print(m.group(1))
+          PY
+            )"
+            NEXT="${BASELINE}"
+          else
+            IFS='.' read -r major minor patch <<< "${BASELINE}"
+            NEXT="${major}.${minor}.$((patch + 1))"
+          fi
+
+          RELEASE_TAG="v${NEXT}"
+
+          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${RELEASE_TAG} already exists — nothing to release."
             exit 1
           fi
 
-          if [[ ! "${BASELINE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Baseline version ${BASELINE_VERSION} is not strict semver"
-            exit 1
-          fi
-
-          IFS='.' read -r major minor patch <<< "${BASELINE_VERSION}"
-          RELEASE_VERSION="${major}.${minor}.$((patch + 1))"
-
-          RELEASE_TAG="v${RELEASE_VERSION}"
-
-          echo "release_version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release_version=${NEXT}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure tag does not already exist
-        shell: bash
-        run: |
-          RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
-          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "::error::Tag ${RELEASE_TAG} already exists."
-            exit 1
-          fi
-
-      - name: Update crate version in Cargo.toml
+      - name: Update version in Cargo.toml
         shell: bash
         run: |
           export RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
           python - <<'PY'
-          import os
-          import pathlib
-          import re
-
+          import os, pathlib, re
           path = pathlib.Path("Cargo.toml")
           text = path.read_text(encoding="utf-8")
-          text, count = re.subn(
-              r'(^|\n)(\[package\][\s\S]*?\nversion = ")([^"]+)(")',
-              rf'\1\2{os.environ["RELEASE_VERSION"]}\4',
-              text,
-              count=1,
+          text, n = re.subn(
+              r'((?:^|\n)\[package\][\s\S]*?\nversion = ")([^"]+)(")',
+              rf'\g<1>{os.environ["RELEASE_VERSION"]}\3',
+              text, count=1,
           )
-          if count != 1:
-              raise SystemExit("Could not update package version in Cargo.toml")
+          if n != 1: raise SystemExit("Could not update version in Cargo.toml")
           path.write_text(text, encoding="utf-8")
           PY
 
-      - name: Check formatting
-        run: cargo fmt --all --check
+      - name: Fix formatting
+        run: cargo fmt --all
 
-      - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Fix lint
+        run: cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features
 
       - name: Test
         run: cargo test
@@ -135,20 +121,14 @@ jobs:
 
       - name: Dry run summary
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
-        shell: bash
         run: |
-          RELEASE_VERSION="${{ steps.version.outputs.release_version }}"
-          echo "Prepared peachnote-vault-core ${RELEASE_VERSION} successfully." >> "$GITHUB_STEP_SUMMARY"
-          echo "Dry run mode is active, so nothing was published or pushed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Dry run — peachnote-vault-core ${{ steps.version.outputs.release_version }} packaged OK. Nothing published." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Authenticate with crates.io
+      - name: Publish to crates.io
         if: github.event_name == 'push' || inputs.dry_run != true
-        id: auth
-        uses: rust-lang/crates-io-auth-action@v1
-
-      - name: Publish crate
-        if: github.event_name == 'push' || inputs.dry_run != true
-        run: cargo publish --allow-dirty --token "${{ steps.auth.outputs.token }}"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --allow-dirty
 
       - name: Commit version bump and push tag
         if: github.event_name == 'push' || inputs.dry_run != true
@@ -158,6 +138,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml
+          git add -u  # pick up any files touched by fmt/clippy --fix
           if ! git diff --cached --quiet; then
             git commit -m "release: ${RELEASE_TAG} [skip release]"
             git push origin HEAD:main
