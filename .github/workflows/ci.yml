@@ -83,6 +83,9 @@ jobs:
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
 
+      - name: Remove lock file (v4 incompatible with 1.72.0)
+        run: rm -f Cargo.lock
+
       - name: Verify tests on MSRV
         run: cargo test
 

@@ -11,10 +11,48 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Verify and package only; do not publish to crates.io or push a tag
+        description: Verify and package only; no tag, no release, no publish
         required: false
         default: true
         type: boolean
+      crates_io_ready_override:
+        description: Override CRATES_IO_READY for this run ("" = use env default)
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - "true"
+          - "false"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# All knobs live here. Edit this block to reconfigure the workflow — nothing
+# below this block should be hardcoded.
+# ─────────────────────────────────────────────────────────────────────────────
+env:
+  # Crate identity
+  CRATE_NAME: peachnote-vault-core
+
+  # Git / release shape
+  RELEASE_BRANCH: main
+  TAG_PREFIX: v
+  FALLBACK_VERSION: "0.1.0"   # used only if no git tag and no crates.io publish exist
+
+  # Bootstrap toggle:
+  #   "false" → tag + GitHub release only, skip crates.io publish (pre-bootstrap)
+  #   "true"  → also publish to crates.io via OIDC Trusted Publishing
+  CRATES_IO_READY: "false"
+
+  # Bot identity for the version-bump commit
+  BOT_NAME: "github-actions[bot]"
+  BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+
+  # Quality gates (set to "false" to skip)
+  RUN_FMT: "true"
+  RUN_CLIPPY: "true"
+  RUN_TESTS: "true"
+  RUN_FUZZ_CHECK: "true"
+  FUZZ_MANIFEST: "fuzz/Cargo.toml"
 
 jobs:
   release:
@@ -24,6 +62,40 @@ jobs:
       contents: write
       id-token: write
     steps:
+      - name: Resolve effective config
+        id: cfg
+        shell: bash
+        run: |
+          # Effective CRATES_IO_READY: workflow_dispatch input wins over env default.
+          OVERRIDE="${{ inputs.crates_io_ready_override }}"
+          if [[ -n "${OVERRIDE}" ]]; then
+            EFFECTIVE_READY="${OVERRIDE}"
+          else
+            EFFECTIVE_READY="${CRATES_IO_READY}"
+          fi
+
+          # Dry run only applies to workflow_dispatch
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            DRY_RUN="${{ inputs.dry_run }}"
+          else
+            DRY_RUN="false"
+          fi
+
+          echo "crates_io_ready=${EFFECTIVE_READY}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${DRY_RUN}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release config"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| crate | \`${CRATE_NAME}\` |"
+            echo "| branch | \`${RELEASE_BRANCH}\` |"
+            echo "| tag prefix | \`${TAG_PREFIX}\` |"
+            echo "| CRATES_IO_READY | \`${EFFECTIVE_READY}\` |"
+            echo "| dry run | \`${DRY_RUN}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -41,45 +113,50 @@ jobs:
         id: version
         shell: bash
         run: |
-          export CRATE_NAME="peachnote-vault-core"
-
-          # Prefer last git tag; fall back to latest published on crates.io
-          LAST_TAG="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
+          # Baseline preference: latest matching git tag → crates.io published → Cargo.toml → FALLBACK_VERSION
+          LAST_TAG="$(git tag --list "${TAG_PREFIX}*" --sort=-version:refname | head -n1)"
           if [[ -n "${LAST_TAG}" ]]; then
-            BASELINE="${LAST_TAG#v}"
+            BASELINE="${LAST_TAG#${TAG_PREFIX}}"
+            BUMP="patch"
           else
             BASELINE="$(python - <<'PY'
           import json, os, urllib.error, urllib.request
           crate = os.environ["CRATE_NAME"]
           url = f"https://crates.io/api/v1/crates/{crate}"
-          req = urllib.request.Request(url, headers={"User-Agent": "github-actions/quickpeach-vault-core"})
+          req = urllib.request.Request(url, headers={"User-Agent": f"github-actions/{crate}"})
           try:
               with urllib.request.urlopen(req, timeout=30) as r:
                   data = json.load(r)
               print(data.get("crate", {}).get("max_stable_version") or data.get("crate", {}).get("newest_version") or "")
           except urllib.error.HTTPError as e:
-              print("") if e.code == 404 else (_ for _ in ()).throw(e)
+              if e.code == 404:
+                  print("")
+              else:
+                  raise
           PY
             )"
-          fi
-
-          if [[ -z "${BASELINE}" ]]; then
-            # No prior release found — use the version already in Cargo.toml
-            BASELINE="$(python - <<'PY'
-          import pathlib, re
+            if [[ -n "${BASELINE}" ]]; then
+              BUMP="patch"
+            else
+              BASELINE="$(python - <<'PY'
+          import os, pathlib, re
           text = pathlib.Path("Cargo.toml").read_text(encoding="utf-8")
           m = re.search(r'(?:^|\n)\[package\][\s\S]*?\nversion = "([^"]+)"', text)
-          if not m: raise SystemExit("Could not read version from Cargo.toml")
-          print(m.group(1))
+          print(m.group(1) if m else os.environ["FALLBACK_VERSION"])
           PY
-            )"
-            NEXT="${BASELINE}"
-          else
-            IFS='.' read -r major minor patch <<< "${BASELINE}"
-            NEXT="${major}.${minor}.$((patch + 1))"
+              )"
+              BUMP="none"
+            fi
           fi
 
-          RELEASE_TAG="v${NEXT}"
+          if [[ "${BUMP}" == "patch" ]]; then
+            IFS='.' read -r major minor patch <<< "${BASELINE}"
+            NEXT="${major}.${minor}.$((patch + 1))"
+          else
+            NEXT="${BASELINE}"
+          fi
+
+          RELEASE_TAG="${TAG_PREFIX}${NEXT}"
 
           if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
             echo "::error::Tag ${RELEASE_TAG} already exists — nothing to release."
@@ -87,7 +164,9 @@ jobs:
           fi
 
           echo "release_version=${NEXT}" >> "$GITHUB_OUTPUT"
-          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${RELEASE_TAG}"   >> "$GITHUB_OUTPUT"
+          echo "baseline=${BASELINE}"         >> "$GITHUB_OUTPUT"
+          echo "bump=${BUMP}"                 >> "$GITHUB_OUTPUT"
 
       - name: Update version in Cargo.toml
         shell: bash
@@ -107,54 +186,85 @@ jobs:
           PY
 
       - name: Fix formatting
+        if: env.RUN_FMT == 'true'
         run: cargo fmt --all
 
       - name: Fix lint
+        if: env.RUN_CLIPPY == 'true'
         run: cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features
 
       - name: Test
+        if: env.RUN_TESTS == 'true'
         run: cargo test
 
       - name: Check fuzz targets compile
-        run: cargo check --manifest-path fuzz/Cargo.toml
+        if: env.RUN_FUZZ_CHECK == 'true'
+        run: cargo check --manifest-path "${FUZZ_MANIFEST}"
 
       - name: Package crate
         run: cargo package --allow-dirty
 
-      - name: Dry run summary
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+      # ─── Dry-run path ───────────────────────────────────────────────────────
+      - name: Dry-run summary
+        if: steps.cfg.outputs.dry_run == 'true'
+        shell: bash
         run: |
-          echo "Dry run — peachnote-vault-core ${{ steps.version.outputs.release_version }} packaged OK. Nothing published." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "### Dry run"
+            echo ""
+            echo "Packaged \`${CRATE_NAME}\` ${{ steps.version.outputs.release_version }}. Nothing tagged, released, or published."
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Authenticate with crates.io
-        if: github.event_name == 'push' || inputs.dry_run != true
-        id: auth
-        uses: rust-lang/crates-io-auth-action@v1
-
-      - name: Publish to crates.io
-        if: github.event_name == 'push' || inputs.dry_run != true
-        run: cargo publish --allow-dirty --token "${{ steps.auth.outputs.token }}"
-
+      # ─── Real-release path: tag + GitHub release ALWAYS run ─────────────────
       - name: Commit version bump and push tag
-        if: github.event_name == 'push' || inputs.dry_run != true
+        if: steps.cfg.outputs.dry_run != 'true'
         shell: bash
         run: |
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name  "${BOT_NAME}"
+          git config user.email "${BOT_EMAIL}"
           git add Cargo.toml
-          git add -u  # pick up any files touched by fmt/clippy --fix
+          git add -u  # pick up files touched by fmt/clippy --fix
           if ! git diff --cached --quiet; then
             git commit -m "release: ${RELEASE_TAG} [skip release]"
-            git push origin HEAD:main
+            git push origin "HEAD:${RELEASE_BRANCH}"
           fi
           git tag "${RELEASE_TAG}"
           git push origin "${RELEASE_TAG}"
 
       - name: Create GitHub release
-        if: github.event_name == 'push' || inputs.dry_run != true
+        if: steps.cfg.outputs.dry_run != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.release_tag }}
-          name: ${{ steps.version.outputs.release_tag }}
+          name:     ${{ steps.version.outputs.release_tag }}
           generate_release_notes: true
+
+      # ─── crates.io path: only when bootstrap is complete ────────────────────
+      - name: Authenticate with crates.io
+        if: steps.cfg.outputs.dry_run != 'true' && steps.cfg.outputs.crates_io_ready == 'true'
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish to crates.io
+        if: steps.cfg.outputs.dry_run != 'true' && steps.cfg.outputs.crates_io_ready == 'true'
+        run: cargo publish --allow-dirty --token "${{ steps.auth.outputs.token }}"
+
+      # ─── Pre-bootstrap notice ───────────────────────────────────────────────
+      - name: Bootstrap notice (CRATES_IO_READY=false)
+        if: steps.cfg.outputs.dry_run != 'true' && steps.cfg.outputs.crates_io_ready != 'true'
+        shell: bash
+        run: |
+          {
+            echo ""
+            echo "### crates.io publish skipped (pre-bootstrap)"
+            echo ""
+            echo "\`CRATES_IO_READY\` is **false**. Tag \`${{ steps.version.outputs.release_tag }}\` and the GitHub release were created so git-based consumers can pin to it, but the crate was **not** published to crates.io."
+            echo ""
+            echo "**Manual bootstrap steps:**"
+            echo "1. Create a token at https://crates.io/settings/tokens scoped to \`${CRATE_NAME}\`."
+            echo "2. Run \`cargo publish --token <TOKEN>\` locally to do the first publish."
+            echo "3. On https://crates.io/crates/${CRATE_NAME}/settings → Trusted Publishing, add a GitHub publisher with workflow \`release.yml\`."
+            echo "4. Flip \`CRATES_IO_READY: \"true\"\` in \`.github/workflows/release.yml\`."
+          } >> "$GITHUB_STEP_SUMMARY"
