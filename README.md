@@ -26,7 +26,7 @@ The repo also includes:
 
 - adversarial crypto and recovery tests under `tests/`
 - compatibility fixtures for frozen v1 behavior under `tests/fixtures/compat/`
-- libFuzzer targets under [`fuzz/README.md`](/Users/pantakan/tida/peachnote-vault-core/fuzz/README.md)
+- libFuzzer targets under [`fuzz/README.md`](./fuzz/README.md)
 - KDF parameter audit notes under [`docs/security/`](docs/security/kdf-audit-iter-ttt.md)
 
 ## Recovery-bundle KDF parameters
